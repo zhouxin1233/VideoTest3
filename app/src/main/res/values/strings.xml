@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">VideoTest3</string>
+    <string name="zz_player_network_invalid">网络异常，请检查后再试</string>
+    <string name="video_error">播放器发生异常</string>
+</resources>
