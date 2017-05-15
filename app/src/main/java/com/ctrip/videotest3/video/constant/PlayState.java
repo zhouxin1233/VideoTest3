@@ -9,8 +9,8 @@ public interface PlayState {
     int PREPARE = 0x01;
     int PLAY = 0x02;
     int PAUSE = 0x03;
-    int STOP = 0x04;
-    int COMPLETE = 0x05;
+    int COMPLETE = 0x04;
+    int STOP = 0x05;
     int ERROR = 0x06;
 
     /**横竖屏改变*/

@@ -1,12 +1,10 @@
 package com.ctrip.videotest3.video.widget;
 
-import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.LayerDrawable;
 import android.os.Build;
 import android.support.annotation.DrawableRes;
-import android.text.TextUtils;
 import android.util.AttributeSet;
 import android.view.View;
 import android.widget.FrameLayout;
@@ -18,14 +16,11 @@ import com.ctrip.videotest3.R;
 import com.ctrip.videotest3.video.constant.PlayState;
 import com.ctrip.videotest3.video.constant.SeekBarState;
 import com.ctrip.videotest3.video.controller.IControllerImpl;
+import com.ctrip.videotest3.video.util.DateUtils;
 import com.ctrip.videotest3.video.util.OrientationUtil;
 
-import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.TimeZone;
-
 /**
- * Created by zxz on 2016/4/28.
+ * 底部栏
  */
 public class PlayerController extends FrameLayout implements View.OnClickListener, SeekBar.OnSeekBarChangeListener {
     private IControllerImpl mControllerImpl;
@@ -35,8 +30,6 @@ public class PlayerController extends FrameLayout implements View.OnClickListene
     private TextView mTvTotalTime;
     private ImageView mIvToggleExpandable;
     private int mDuration = 0;//视频长度(ms)
-    private SimpleDateFormat mFormatter = null;
-    private static final String ZERO_TIME = "00:00";
     private boolean mUserOperateSeecbar = false;//用户是否正在操作进度条
     private Drawable[] mProgressLayers = new Drawable[3];
     private LayerDrawable mProgressLayerDrawable;
@@ -91,7 +84,6 @@ public class PlayerController extends FrameLayout implements View.OnClickListene
         if (mControllerImpl == null) {
             return;
         }
-
         int id = v.getId();
         if (id == R.id.rl_play_pause || id == R.id.iv_play_pause) {
             mControllerImpl.onPlayTurn();
@@ -103,7 +95,7 @@ public class PlayerController extends FrameLayout implements View.OnClickListene
     @Override
     public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
         if (fromUser) {
-            mTvCurrentTime.setText(formatPlayTime(progress));
+            mTvCurrentTime.setText(DateUtils.formatPlayTime(progress));
         }
     }
 
@@ -124,8 +116,7 @@ public class PlayerController extends FrameLayout implements View.OnClickListene
      * 设置播放状态
      * @param curPlayState 参考
      */
-    public void setPlayState(int curPlayState) {
-
+    public void setPlayUI(int curPlayState) {
         switch (curPlayState) {
             case PlayState.PLAY://设置播放状态
                 mIvPlayPause.setImageResource(R.drawable.zz_player_play);
@@ -174,7 +165,7 @@ public class PlayerController extends FrameLayout implements View.OnClickListene
      */
     public void updateProgress(int progress, int secondProgress, int maxValue, boolean isTracking) {
         // 更新播放时间信息
-        initFormatter(maxValue);
+//        initFormatter(maxValue);
 
         //更新进度条
         mDuration = maxValue;
@@ -183,38 +174,10 @@ public class PlayerController extends FrameLayout implements View.OnClickListene
 
         if (!isTracking) {
             mCsb.setProgress(progress);
-            mTvCurrentTime.setText(formatPlayTime(progress));
+            mTvCurrentTime.setText(DateUtils.formatPlayTime(progress));
         }
-        mTvTotalTime.setText(formatPlayTime(maxValue));
+        mTvTotalTime.setText(DateUtils.formatPlayTime(maxValue));
     }
-
-    private void initFormatter(int maxValue) {
-        if (mFormatter == null) {
-            if (maxValue >= (59 * 60 * 1000 + 59 * 1000)) {
-                mFormatter = new SimpleDateFormat("HH:mm:ss");
-            } else {
-                mFormatter = new SimpleDateFormat("mm:ss");
-            }
-            mFormatter.setTimeZone(TimeZone.getTimeZone("GMT+00:00"));
-        }
-    }
-
-    @SuppressLint("SimpleDateFormat")
-    private String formatPlayTime(long time) {
-        if (time <= 0) {
-            return ZERO_TIME;
-        }
-
-        if (mFormatter == null) {
-            initFormatter(mDuration);
-        }
-        String timeStr = mFormatter.format(new Date(time));
-        if (TextUtils.isEmpty(timeStr)) {
-            timeStr = ZERO_TIME;
-        }
-        return timeStr;
-    }
-
     public void updateNetworkState(boolean isAvailable) {
         mCsb.setSeekable(isAvailable);
     }

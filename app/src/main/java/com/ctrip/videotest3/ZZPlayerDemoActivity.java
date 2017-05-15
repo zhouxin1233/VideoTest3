@@ -3,6 +3,7 @@ package com.ctrip.videotest3;
 import android.app.Activity;
 import android.content.res.Configuration;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.Toast;
@@ -16,7 +17,7 @@ public class ZZPlayerDemoActivity extends Activity {
 
     private VideoPlayer mVp;
     private String mVideoUrl;
-
+    public static final String TAG="===DemoActivity  ";
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -28,7 +29,6 @@ public class ZZPlayerDemoActivity extends Activity {
         initData();
         initView();
         initListener();
-
     }
 
     private IPlayerImpl playerImpl = new IPlayerImpl() {
@@ -59,8 +59,9 @@ public class ZZPlayerDemoActivity extends Activity {
     }
 
     private void initData() {
-                mVideoUrl = "android.resource://" + getPackageName() + "/" + R.raw.av;
-//        mVideoUrl = "http://wvideo.spriteapp.cn/video/2017/0321/8e213d42-0e07-11e7-abef-d4ae5296039d_wpd.mp4";
+//                mVideoUrl = "android.resource://" + getPackageName() + "/" + R.raw.av;
+//        mVideoUrl = "http://mvideo.spriteapp.cn/video/2017/0513/9875dcc2-37f0-11e7-960a-1866daeb0df1_wpcco.mp4";
+        mVideoUrl = "http://mvideo.spriteapp.cn/video/2017/0410/58eaedff21123_wpcco.mp4";
     }
 
     private void initView() {
@@ -74,6 +75,7 @@ public class ZZPlayerDemoActivity extends Activity {
     @Override
     public void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
+        Log.i(TAG, "onConfigurationChanged: ");
         if (mVp != null) {
             mVp.updateActivityOrientation();
         }
@@ -81,17 +83,21 @@ public class ZZPlayerDemoActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        Log.i(TAG, "onResume: ");
         mVp.onHostResume();
     }
 
     @Override
     protected void onPause() {
         super.onPause();
+        Log.i(TAG, "onPause: ");
         mVp.onHostPause();
     }
 
     @Override
     public void onBackPressed() {
+        Log.i(TAG, "onBackPressed: ");
+
         mVp.onHostDestroy();
         finish();
     }
@@ -99,6 +105,7 @@ public class ZZPlayerDemoActivity extends Activity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        Log.i(TAG, "onDestroy: ");
         mVp.onHostDestroy();
     }
 }

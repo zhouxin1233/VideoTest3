@@ -54,7 +54,7 @@ public class OrientationUtil {
             }
 
             WindowManager.LayoutParams attrs = window.getAttributes();
-            attrs.flags &= (~WindowManager.LayoutParams.FLAG_FULLSCREEN);
+            attrs.flags &= (WindowManager.LayoutParams.FLAG_FULLSCREEN);
             window.setAttributes(attrs);
             window.clearFlags(WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS);
         }

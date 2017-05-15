@@ -32,12 +32,12 @@ import com.ctrip.videotest3.video.controller.AnimationImpl;
 import com.ctrip.videotest3.video.controller.IControllerImpl;
 import com.ctrip.videotest3.video.controller.IPlayerImpl;
 import com.ctrip.videotest3.video.controller.ITitleBarImpl;
+import com.ctrip.videotest3.video.util.ClickUtils;
 import com.ctrip.videotest3.video.util.DensityUtil;
 import com.ctrip.videotest3.video.util.NetworkUtil;
 import com.ctrip.videotest3.video.util.OrientationUtil;
 
 import java.lang.ref.WeakReference;
-import java.util.Calendar;
 import java.util.Timer;
 import java.util.TimerTask;
 
@@ -45,45 +45,40 @@ import java.util.TimerTask;
  * Created by zxz on 2016/4/28.
  */
 public class VideoPlayer extends RelativeLayout implements View.OnTouchListener {
+    private static final String TAG = "===VideoPlayer";
     private PlayerTitleBar mTitleBar;
     private ZZVideoView mVv;
     private PlayerController mController;
-    private static final String TAG = "zzVideoPlayer";
-
     private Uri mVideoUri;
     private String mVideoProtocol;//视频地址所用协议
-
     private Animation mEnterFromTop,mEnterFromBottom,mExitFromTop,mExitFromBottom;
 
-    private int mDuration = 0;//视频长度
-    private long mCurrentDownTime = 0;//当前action_down时的时间值
-    private long mLastDownTime = 0;//上次action_down的时间值，防止快速触摸多次触发
     private int mCurrentPlayState = PlayState.IDLE;
-
-    private static final int MIN_CLICK_INTERVAL = 400;//连续两次down事件最小时间间隔(ms)
     private static final int UPDATE_TIMER_INTERVAL = 1000;
     private static final int TIME_AUTO_HIDE_BARS_DELAY = 3000;
-
     private static final int MSG_UPDATE_PROGRESS_TIME = 1;//更新播放进度时间
+
     /**隐藏标题栏和控制条*/
     private static final int MSG_AUTO_HIDE_BARS = 2;
     private double FLING_MIN_VELOCITY = 5;
     private double FLING_MIN_DISTANCE = 10;
     private double MIN_CHANGE_VOLUME_DISTANCE = FLING_MIN_DISTANCE * 10;
-
     private Timer mUpdateTimer = null;
-
-    private WeakReference<Activity> mHostActivity;
-    private int mLastPlayingPos = -1;//onPause时的播放位置
+    private WeakReference<Activity> mHostActivity; // 宿主绑定的activity todo:zx1 这里如果是fragment呢
     private BroadcastReceiver mNetworkReceiver;
     private boolean mOnPrepared;
-    private boolean mNetworkAvailable;
     private boolean mIsOnlineSource=false;//是否是网络视频 默认为本地的 false
     private View mRlPlayerContainer;//整个播放器总布局
     private AudioManager mAudioManager;
+    private FrameLayout mFlLoading;
+    private float lastDownY = 0;
+    private int mDuration = 0;//视频长度
     /** 断网时获取的已缓冲长度 从-1开始,用于加载前就断网,此时通过方法getBufferLength()得到的是0,不便于判断*/
     private int mLastBufferLength = -1;
-
+    private int mLastPlayingPos = -1;//onPause时的播放位置
+    public int mLastUpdateTime = 0;//上一次updateTimer更新的播放时间值
+    private GestureDetector mGestureDetector;
+    private Handler mHandler;
     private ITitleBarImpl mTitleBarImpl = new ITitleBarImpl() {
         @Override
         public void onBackClick() {
@@ -94,14 +89,10 @@ public class VideoPlayer extends RelativeLayout implements View.OnTouchListener 
             }
         }
     };
-    private FrameLayout mFlLoading;
-    private float lastDownY = 0;
 
-    private GestureDetector mGestureDetector;
     private GestureDetector.OnGestureListener mGestureListener = new GestureDetector.OnGestureListener() {
         @Override
         public boolean onDown(MotionEvent e) {
-            mCurrentDownTime = Calendar.getInstance().getTimeInMillis();
             lastDownY = e.getY();
             return true;
         }
@@ -112,14 +103,13 @@ public class VideoPlayer extends RelativeLayout implements View.OnTouchListener 
 
         @Override
         public boolean onSingleTapUp(MotionEvent e) {
-            if (isTouchEventValid()) {//是否为单击
+            if (ClickUtils.isTouchEventValid()) {//是否为单击
                 mHandler.removeMessages(MSG_AUTO_HIDE_BARS);
                 if (mController.getVisibility() == VISIBLE) {
                     showOrHideBars(false, true);
                 } else {
                     showOrHideBars(true, true);
                 }
-                mLastDownTime = mCurrentDownTime;
             }
             return false;
         }
@@ -130,13 +120,12 @@ public class VideoPlayer extends RelativeLayout implements View.OnTouchListener 
             int top = mRlPlayerContainer.getTop();
             int left = mRlPlayerContainer.getLeft();
             int bottom = mRlPlayerContainer.getBottom();
-
             if (e2.getY() <= top || e2.getY() >= bottom) {//限制触摸区域
                 return false;
             }
             float deltaY = lastDownY - e2.getY();
             // Log.i(TAG, "onScroll deltaY = " + deltaY + "  ,lastDownY= " + lastDownY + ",e2.getY() = " + e2.getY());
-            if (e1.getX() < left + width / 2) {//调整亮度
+            if (e1.getX() < left + width/2) {//调整亮度 左边距离中间偏60
                 if (deltaY > FLING_MIN_DISTANCE && Math.abs(distanceY) > FLING_MIN_VELOCITY) {
                     setScreenBrightness(20);
                 } else if (deltaY < -1 * FLING_MIN_DISTANCE && Math.abs(distanceY) > FLING_MIN_VELOCITY) {
@@ -144,7 +133,7 @@ public class VideoPlayer extends RelativeLayout implements View.OnTouchListener 
                 } else {
                     return false;
                 }
-            } else {//调整音量
+            } else if (e1.getX()>left+width/2 ){//调整音量
                 if (deltaY > MIN_CHANGE_VOLUME_DISTANCE) {
                     setVoiceVolume(true);
                 } else if (deltaY < MIN_CHANGE_VOLUME_DISTANCE * -1) {
@@ -173,30 +162,22 @@ public class VideoPlayer extends RelativeLayout implements View.OnTouchListener 
      */
     private void updatePlayState(int playState) {
         mCurrentPlayState = playState;
-        mController.setPlayState(playState);
+        mController.setPlayUI(playState);
     }
 
+    /**底部控制栏的相关 点击的回调*/
     private IControllerImpl mControllerImpl = new IControllerImpl() {
         @Override
         public void onPlayTurn() {
             //网络不正常时,不允许切换,本地视频则跳过这一步
-            if (VideoUriProtocol.PROTOCOL_HTTP.equalsIgnoreCase(mVideoProtocol)&& !mNetworkAvailable) {
+            if (VideoUriProtocol.PROTOCOL_HTTP.equalsIgnoreCase(mVideoProtocol)&& !NetworkUtil.isNetworkAvailable()) {
                 mIPlayerImpl.onNetWorkError();
                 return;
             }
-            switch (mCurrentPlayState) {
-                case PlayState.PLAY:
-                    pausePlay();
-                    break;
-                case PlayState.IDLE:
-                case PlayState.PREPARE:
-                case PlayState.PAUSE:
-                case PlayState.COMPLETE:
-                case PlayState.STOP:
-                    startOrRestartPlay();
-                    break;
-                case PlayState.ERROR:
-                    break;
+            if (mVv.isPlaying()){//播放-->暂停
+                setPlayerState(PlayState.PAUSE);
+            }else{  //暂停-->播放
+                setPlayerState(PlayState.PLAY);
             }
             sendAutoHideBarsMsg();
         }
@@ -223,8 +204,29 @@ public class VideoPlayer extends RelativeLayout implements View.OnTouchListener 
         }
     };
 
-    public int mLastUpdateTime = 0;//上一次updateTimer更新的播放时间值
-    private Handler mHandler;
+    /**
+     * 设置播放器的播放状态
+     * @param currentPlayState 当前状态
+     */
+    private void setPlayerState(int currentPlayState){
+        updatePlayState(currentPlayState);// 更新播放状态 并更改UI
+        switch (currentPlayState) {
+            case PlayState.PLAY: // 播放/重新播放
+                startOrRestartPlay();
+                break;
+            case PlayState.IDLE:
+            case PlayState.PREPARE:
+            case PlayState.PAUSE://播放暂停
+                pausePlay();
+            case PlayState.COMPLETE:
+            case PlayState.STOP://播放停止
+                break;
+            case PlayState.ERROR:
+                break;
+        }
+
+    }
+
     class MyHandler extends Handler{
         private WeakReference<Activity> mWeakReference;
 
@@ -238,7 +240,7 @@ public class VideoPlayer extends RelativeLayout implements View.OnTouchListener 
             if (mWeakReference.get()!=null){
                 switch (msg.what){
                     case MSG_UPDATE_PROGRESS_TIME:
-                        if (mNetworkAvailable) {
+                        if (NetworkUtil.isNetworkAvailable()) {
                             mLastBufferLength = -1;
                         }
                         mLastPlayingPos = getCurrentTime();
@@ -247,6 +249,7 @@ public class VideoPlayer extends RelativeLayout implements View.OnTouchListener 
                         }
                         mController.updateProgress(mLastPlayingPos, getBufferProgress());
                         mVv.setBackgroundColor(Color.TRANSPARENT);
+                        Log.i(TAG, "mLastPlayingPos: "+mLastPlayingPos+" , getBufferProgress(): "+getBufferProgress());
                         break;
                     case MSG_AUTO_HIDE_BARS:
                         animateShowOrHideBars(false);
@@ -285,10 +288,10 @@ public class VideoPlayer extends RelativeLayout implements View.OnTouchListener 
     private MediaPlayer.OnErrorListener mErrorListener = new MediaPlayer.OnErrorListener() {
         @Override
         public boolean onError(MediaPlayer mp, int what, int extra) {
-            Log.e(TAG, "MediaPlayer.OnErrorListener what = " + what + " , extra = " + extra + " ,mNetworkAvailable:" + mNetworkAvailable + " ,mCurrentPlayState:" + mCurrentPlayState);
+            Log.e(TAG, "MediaPlayer.OnErrorListener what = " + what + " , extra = " + extra + " ,mNetworkAvailable:" + NetworkUtil.isNetworkAvailable() + " ,mCurrentPlayState:" + mCurrentPlayState);
             if (mCurrentPlayState != PlayState.ERROR) {
                 //  判断网络状态,如果有网络,则重新加载播放,如果没有则报错
-                if ((mIsOnlineSource && mNetworkAvailable) || !mIsOnlineSource) {
+                if ((mIsOnlineSource && NetworkUtil.isNetworkAvailable()) || !mIsOnlineSource) {
                     startOrRestartPlay();
                 } else {
                     if (mIPlayerImpl != null) {
@@ -408,13 +411,12 @@ public class VideoPlayer extends RelativeLayout implements View.OnTouchListener 
     }
 
     /**加载视频 在这里才真正把视频路径设置到VideoView中 */
-    private void load() {
-        mNetworkAvailable = NetworkUtil.isNetworkAvailable(mHostActivity.get());
+    private void loadData() {
         // 处理加载过程中,断网,再联网,如果重新设置video路径,videoView会去reset mediaPlayer,可能出错
         // TODO: 2016/7/15 郁闷了,不重新设置的话,断网播放到缓冲尽头又联网时,没法继续加载播放,矛盾啊,先备注下
         if (mIsOnlineSource) {
-            if (!mNetworkAvailable) {
-                Log.i(TAG, "load failed because network not available");
+            if (!NetworkUtil.isNetworkAvailable()) {
+                Log.i(TAG, "loadData failed because network not available");
                 return;
             }
             mVv.setVideoPath(mVideoUri.toString());
@@ -425,39 +427,37 @@ public class VideoPlayer extends RelativeLayout implements View.OnTouchListener 
 
     /**开始播放或重新加载播放*/
     public void startOrRestartPlay() {
-        // 断过网
         if (mLastBufferLength >= 0 && mIsOnlineSource) {
             resumeFromError();
         } else {
-            goOnPlay();
+            goPlay();
         }
     }
 
     public void resumeFromError() {
-        load();
+        loadData();
         mVv.start();
         mVv.seekTo(mLastPlayingPos);
         updatePlayState(PlayState.PLAY);
         resetUpdateTimer();
     }
 
-
-    public void goOnPlay() {
+    public void goPlay() {
         // 在线视频,网络异常时,不进行加载播放
-        if (mIsOnlineSource && !mNetworkAvailable) {
+        if (mIsOnlineSource && !NetworkUtil.isNetworkAvailable()) {
             return;
         }
         mVv.start();
         if (mCurrentPlayState == PlayState.COMPLETE) {
             mVv.seekTo(0);
         }
-        updatePlayState(PlayState.PLAY);
+
         resetUpdateTimer();
     }
 
+    /**暂停播放*/
     public void pausePlay() {
-        updatePlayState(PlayState.PAUSE);
-        if (canPause()) {
+        if ((mCurrentPlayState != PlayState.ERROR) && mOnPrepared && isPlaying() && mVv.canPause()) {
             mVv.pause();
         }
     }
@@ -465,9 +465,8 @@ public class VideoPlayer extends RelativeLayout implements View.OnTouchListener 
      * 设置视频播放路径
      * 1. 设置当前项目中res/raw目录中的文件: "android.resource://" + getPackageName() + "/" + R.raw.yourName
      * 2. 设置网络视频文件: "http:\//****\/abc.mp4"
-     * @param path
      */
-    public void setVideoUri(@NonNull Activity act, @NonNull String path) {
+    public void loadAndStartVideo(@NonNull Activity act, @NonNull String path) {
         mHostActivity = new WeakReference<>(act);
         mVideoUri = Uri.parse(path);
         mVideoProtocol = mVideoUri.getScheme();
@@ -475,18 +474,12 @@ public class VideoPlayer extends RelativeLayout implements View.OnTouchListener 
             mIsOnlineSource = true;
         }
         initNetworkMonitor();
-        registerNetworkReceiver();
-    }
-
-    public void loadAndStartVideo(@NonNull Activity act, @NonNull String path) {
-        setVideoUri(act, path);
-        load();
-        startOrRestartPlay();
+        loadData();
+        setPlayerState(PlayState.PLAY);
     }
 
     @Override
     public boolean onTouch(View v, MotionEvent event) {
-
         switch (event.getAction()) {
             case MotionEvent.ACTION_UP:
                 sendAutoHideBarsMsg();
@@ -508,11 +501,10 @@ public class VideoPlayer extends RelativeLayout implements View.OnTouchListener 
             forceShowOrHideBars(show);
         }
     }
-    /**直接显/隐标题栏和控制栏*/
+    /**直接 显/隐 标题栏和控制栏*/
     private void forceShowOrHideBars(boolean show) {
         mTitleBar.clearAnimation();
         mController.clearAnimation();
-
         if (show) {
             mController.setVisibility(VISIBLE);
             mTitleBar.setVisibility(VISIBLE);
@@ -526,7 +518,6 @@ public class VideoPlayer extends RelativeLayout implements View.OnTouchListener 
     private void animateShowOrHideBars(boolean show) {
         mTitleBar.clearAnimation();
         mController.clearAnimation();
-
         if (show) {
             if (mTitleBar.getVisibility() != VISIBLE) {
                 mTitleBar.startAnimation(mEnterFromTop);
@@ -538,16 +529,6 @@ public class VideoPlayer extends RelativeLayout implements View.OnTouchListener 
                 mController.startAnimation(mExitFromBottom);
             }
         }
-    }
-    /**
-     * 判断连续两次触摸事件间隔是否符合要求,避免快速点击等问题
-     * @return
-     */
-    private boolean isTouchEventValid() {
-        if (mCurrentDownTime - mLastDownTime >= MIN_CLICK_INTERVAL) {
-            return true;
-        }
-        return false;
     }
 
     private void resetUpdateTimer() {
@@ -590,6 +571,7 @@ public class VideoPlayer extends RelativeLayout implements View.OnTouchListener 
      * @return 缓冲百分比 0-100
      */
     private int getBufferProgress() {
+        Log.i(TAG, "getBufferPercentage(): "+mVv.getBufferPercentage());
         return mIsOnlineSource ? mVv.getBufferPercentage() : 100;
     }
 
@@ -632,10 +614,10 @@ public class VideoPlayer extends RelativeLayout implements View.OnTouchListener 
      */
     public void onHostResume() {
         //        Log.i(TAG, "onHostResume " + mLastPlayingPos);
-        mNetworkAvailable = NetworkUtil.isNetworkAvailable(mHostActivity.get());
         if (mLastPlayingPos >= 0) {
             // 进度条更新为上次播放时间
             startOrRestartPlay();
+            setPlayerState(mCurrentPlayState);
         }
         //强制弹出标题栏和控制栏
         forceShowOrHideBars(true);
@@ -670,9 +652,8 @@ public class VideoPlayer extends RelativeLayout implements View.OnTouchListener 
             public void onReceive(Context context, Intent intent) {
                 // 网络变化
                 if (intent.getAction().equalsIgnoreCase(ConnectivityManager.CONNECTIVITY_ACTION)) {
-                    mNetworkAvailable = NetworkUtil.isNetworkAvailable(mHostActivity.get());
-                    mController.updateNetworkState(mNetworkAvailable || !mIsOnlineSource);
-                    if (!mNetworkAvailable) {
+                    mController.updateNetworkState(NetworkUtil.isNetworkAvailable() || !mIsOnlineSource);
+                    if (!NetworkUtil.isNetworkAvailable()) {
                         getBufferLength();
                         mIPlayerImpl.onNetWorkError();
                     } else {
@@ -683,6 +664,8 @@ public class VideoPlayer extends RelativeLayout implements View.OnTouchListener 
                 }
             }
         };
+        IntentFilter filter = new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION);
+        mHostActivity.get().registerReceiver(mNetworkReceiver, filter);
     }
 
     /**
@@ -690,12 +673,8 @@ public class VideoPlayer extends RelativeLayout implements View.OnTouchListener 
      */
     private int getBufferLength() {
         mLastBufferLength = getBufferProgress() * mDuration / 100;
+        Log.i(TAG, "getBufferLength: "+ mLastBufferLength);
         return mLastBufferLength;
-    }
-
-    private void registerNetworkReceiver() {
-        IntentFilter filter = new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION);
-        mHostActivity.get().registerReceiver(mNetworkReceiver, filter);
     }
 
     public void unRegisterNetworkReceiver() {
@@ -703,10 +682,6 @@ public class VideoPlayer extends RelativeLayout implements View.OnTouchListener 
             mHostActivity.get().unregisterReceiver(mNetworkReceiver);
             mNetworkReceiver = null;
         }
-    }
-
-    private boolean canPause() {
-        return ((mCurrentPlayState != PlayState.ERROR) && mOnPrepared && isPlaying() && mVv.canPause());
     }
 
     /**是否显示加载进度框*/
