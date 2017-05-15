@@ -244,6 +244,7 @@ public class VideoPlayer extends RelativeLayout implements View.OnTouchListener 
                             mLastBufferLength = -1;
                         }
                         mLastPlayingPos = getCurrentTime();
+                        Log.i(TAG, "mLastPlayingPos: "+mLastPlayingPos);
                         if (mCurrentPlayState == PlayState.COMPLETE) {
                             mLastPlayingPos = 0;
                         }
@@ -563,15 +564,13 @@ public class VideoPlayer extends RelativeLayout implements View.OnTouchListener 
         }
     }
 
+    /**@return 当前播放的时间(毫秒)*/
     private int getCurrentTime() {
         return mVv.getCurrentPosition();
     }
 
-    /**
-     * @return 缓冲百分比 0-100
-     */
+    /** @return 缓冲百分比 0-100*/
     private int getBufferProgress() {
-        Log.i(TAG, "getBufferPercentage(): "+mVv.getBufferPercentage());
         return mIsOnlineSource ? mVv.getBufferPercentage() : 100;
     }
 
