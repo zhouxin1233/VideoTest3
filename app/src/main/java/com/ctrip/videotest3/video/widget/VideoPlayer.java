@@ -78,7 +78,7 @@ public class VideoPlayer extends RelativeLayout implements View.OnTouchListener 
     private int mLastPlayingPos = -1;//onPause时的播放位置
     public int mLastUpdateTime = 0;//上一次updateTimer更新的播放时间值
     private GestureDetector mGestureDetector;
-    private Handler mHandler;
+
     private ITitleBarImpl mTitleBarImpl = new ITitleBarImpl() {
         @Override
         public void onBackClick() {
@@ -227,6 +227,7 @@ public class VideoPlayer extends RelativeLayout implements View.OnTouchListener 
 
     }
 
+    private Handler mHandler;
     class MyHandler extends Handler{
         private WeakReference<Activity> mWeakReference;
 
@@ -293,6 +294,7 @@ public class VideoPlayer extends RelativeLayout implements View.OnTouchListener 
             if (mCurrentPlayState != PlayState.ERROR) {
                 //  判断网络状态,如果有网络,则重新加载播放,如果没有则报错
                 if ((mIsOnlineSource && NetworkUtil.isNetworkAvailable()) || !mIsOnlineSource) {
+                    Log.i("==="+TAG, "onError: ");
                     startOrRestartPlay();
                 } else {
                     if (mIPlayerImpl != null) {
@@ -425,13 +427,14 @@ public class VideoPlayer extends RelativeLayout implements View.OnTouchListener 
             mVv.setVideoURI(mVideoUri);
         }
     }
-
     /**开始播放或重新加载播放*/
     public void startOrRestartPlay() {
+        Log.i(TAG, "startOrRestartPlay: 这里走了几次 ");
         if (mLastBufferLength >= 0 && mIsOnlineSource) {
             resumeFromError();
         } else {
             goPlay();
+
         }
     }
 
@@ -452,7 +455,6 @@ public class VideoPlayer extends RelativeLayout implements View.OnTouchListener 
         if (mCurrentPlayState == PlayState.COMPLETE) {
             mVv.seekTo(0);
         }
-
         resetUpdateTimer();
     }
 
@@ -612,10 +614,9 @@ public class VideoPlayer extends RelativeLayout implements View.OnTouchListener 
      * 宿主页面onResume的时候从上次播放位置继续播放
      */
     public void onHostResume() {
-        //        Log.i(TAG, "onHostResume " + mLastPlayingPos);
         if (mLastPlayingPos >= 0) {
             // 进度条更新为上次播放时间
-            startOrRestartPlay();
+            Log.i("==="+TAG, "onHostResume: ");
             setPlayerState(mCurrentPlayState);
         }
         //强制弹出标题栏和控制栏
@@ -670,7 +671,7 @@ public class VideoPlayer extends RelativeLayout implements View.OnTouchListener 
     /**
      * 获取已缓冲长度 毫秒
      */
-    private int getBufferLength() {
+    private int  getBufferLength() {
         mLastBufferLength = getBufferProgress() * mDuration / 100;
         Log.i(TAG, "getBufferLength: "+ mLastBufferLength);
         return mLastBufferLength;

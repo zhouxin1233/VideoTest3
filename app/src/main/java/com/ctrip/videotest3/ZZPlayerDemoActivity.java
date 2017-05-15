@@ -59,9 +59,9 @@ public class ZZPlayerDemoActivity extends Activity {
     }
 
     private void initData() {
-//                mVideoUrl = "android.resource://" + getPackageName() + "/" + R.raw.av;
+                mVideoUrl = "android.resource://" + getPackageName() + "/" + R.raw.av;
 //        mVideoUrl = "http://mvideo.spriteapp.cn/video/2017/0513/9875dcc2-37f0-11e7-960a-1866daeb0df1_wpcco.mp4";
-        mVideoUrl = "http://mvideo.spriteapp.cn/video/2017/0410/58eaedff21123_wpcco.mp4";
+//        mVideoUrl = "http://mvideo.spriteapp.cn/video/2017/0410/58eaedff21123_wpcco.mp4";
     }
 
     private void initView() {
